@@ -1,0 +1,1 @@
+// Defines common types and constants used throughout the Log4Yum project.

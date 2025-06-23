@@ -1,0 +1,53 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "clang-debug",
+      "displayName": "Clang Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "C:/msys64/clang64/bin/clang++.exe",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -stdlib=libc++",
+        "CMAKE_CXX_STANDARD": "23"
+      }
+    },
+    {
+      "name": "clang-release",
+      "displayName": "Clang Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "C:/msys64/clang64/bin/clang++.exe",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -stdlib=libc++",
+        "CMAKE_CXX_STANDARD": "23"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug Build",
+      "configurePreset": "clang-debug"
+    },
+    {
+      "name": "release",
+      "displayName": "Release Build",
+      "configurePreset": "clang-release"
+    },
+    {
+      "name": "clean-debug",
+      "displayName": "Debug Build (Clean)",
+      "configurePreset": "clang-debug",
+      "targets": ["clean"]
+    },
+    {
+      "name": "clean-release",
+      "displayName": "Release Build (Clean)",
+      "configurePreset": "clang-release",
+      "targets": ["clean"]
+    }
+  ]
+}
