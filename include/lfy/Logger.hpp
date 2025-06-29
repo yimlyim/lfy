@@ -17,10 +17,6 @@
 
 namespace lfy {
 
-// Flushing Policies define how the outputter should handle flushing of log
-// messages. It is globally set for all outputters in a logger.
-enum class FlushingPolicy { AlwaysFlush, PeriodicFlush, NeverFlush };
-
 struct LogMetaData;
 // For Thread Safety, never use a lambda which captures a state by reference.
 using HeaderGenerator = std::function<std::string(const LogMetaData &)>;
@@ -44,6 +40,32 @@ inline constexpr auto Time = [](const LogMetaData &metaData) {
   return std::format("{:%FT%R:%S%Ez}", now);
 };
 } // namespace headergen
+
+using Flusher = std::function<void(const std::shared_ptr<Outputter>)>;
+
+namespace flushers {
+inline constexpr auto None = [](const auto _) {
+  // Flushing is disabled, do nothing. The compiler will optimize this out.
+  return;
+};
+inline constexpr auto AlwaysFlush = [](const auto outputter) {
+  outputter->flush();
+};
+inline constexpr auto PeriodicFlush = [](const auto &outputter) {
+  using OutputterPtr = const void *;
+  static std::mutex m;
+  static std::unordered_map<OutputterPtr, std::chrono::system_clock::time_point>
+      lastFlushMap;
+
+  std::lock_guard lock(m);
+  auto now = std::chrono::system_clock::now();
+  auto &lastFlush = lastFlushMap[static_cast<OutputterPtr>(outputter.get())];
+  if (now - lastFlush >= std::chrono::seconds(2)) {
+    outputter->flush();
+    lastFlush = now;
+  }
+};
+} // namespace flushers
 
 class LogFormatter {
 public:
@@ -74,12 +96,10 @@ public:
   Logger &operator=(const Logger &) = delete;
 
   void log(const std::string &message) {
-    for (const auto &outputter : m_outputters)
+    for (const auto &outputter : m_outputters) {
       outputter->output(message);
-
-    if (m_flushingPolicy == FlushingPolicy::AlwaysFlush)
-      for (const auto &outputter : m_outputters)
-        outputter->flush();
+      m_flushApplier(outputter);
+    }
   }
 
   template <typename... Args>
@@ -135,14 +155,13 @@ public:
   }
 
   Logger &setLogLevel(LogLevel level) {
-    // Atomic assignment is thread-safe, no need for a lock here.
     m_level = level;
     return *this;
   }
 
-  Logger &setFlushingPolicy(FlushingPolicy policy) {
-    // Atomic assignment is thread-safe, no need for a lock here.
-    m_flushingPolicy = policy;
+  Logger &setFlusher(Flusher flushApplier) {
+    std::lock_guard l{m_mutex};
+    m_flushApplier = std::move(flushApplier);
     return *this;
   }
 
@@ -160,8 +179,9 @@ public:
 
   [[nodiscard]] LogLevel getLogLevel() const { return m_level; }
 
-  [[nodiscard]] FlushingPolicy getFlushingPolicy() const {
-    return m_flushingPolicy;
+  [[nodiscard]] Flusher getFlusher() const {
+    std::lock_guard l{m_mutex};
+    return m_flushApplier;
   }
 
 private:
@@ -172,7 +192,7 @@ private:
   std::string m_name;
   LogFormatter m_formatter;
   std::atomic<LogLevel> m_level{LogLevel::Info};
-  std::atomic<FlushingPolicy> m_flushingPolicy{FlushingPolicy::AlwaysFlush};
+  Flusher m_flushApplier{flushers::PeriodicFlush};
 };
 
 } // namespace lfy
