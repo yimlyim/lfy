@@ -1,0 +1,9 @@
+thirdparty/
+test/
+.vscode/
+.cache/
+build*/
+CMakePresets.json
+goals.md
+testfile.txt
+compile_commands.json
