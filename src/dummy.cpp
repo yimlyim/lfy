@@ -1,6 +1,6 @@
-#include "Log4Yum/LogRepository.hpp"
-#include "Log4Yum/Logger.hpp"
-#include "Log4Yum/Outputter.hpp"
+#include "lfy/LogRepository.hpp"
+#include "lfy/Logger.hpp"
+#include "lfy/Outputter.hpp"
 #include <cstddef>
 #include <fstream>
 #include <sstream>
@@ -12,7 +12,7 @@
 
 int main() {
   // This is a dummy main function to ensure the code compiles.
-  using namespace log4yum;
+  using namespace lfy;
   std::shared_ptr<Logger> logger = LogRepository{}.getLogger("dummy_logger");
   logger->addOutputter(std::make_unique<ConsoleOutputter>())
       .addHeaderGenerator(headergen::Time)

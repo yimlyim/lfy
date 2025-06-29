@@ -14,7 +14,7 @@
 
 #include "Logger.hpp"
 
-namespace log4yum {
+namespace lfy {
 
 class LogRepository {
 public:
@@ -58,4 +58,4 @@ private:
   }
 };
 
-} // namespace log4yum
+} // namespace lfy

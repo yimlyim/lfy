@@ -1,33 +1,33 @@
 cmake_minimum_required(VERSION 3.16)
-project(Log4Yum VERSION 0.1.0 LANGUAGES CXX)
+project(lfy VERSION 0.1.0 LANGUAGES CXX)
 
-set(PROJECT_NAME Log4Yum)
+set(PROJECT_NAME lfy)
 
 # Debug vs Release specific flags
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-add_library(Log4Yum INTERFACE)
+add_library(lfy INTERFACE)
 
-target_include_directories(Log4Yum INTERFACE
+target_include_directories(lfy INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
 # Set properties
-set_target_properties(Log4Yum PROPERTIES
+set_target_properties(lfy PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
     PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/*.hpp"
 )
 
 # Dummy target to force compile_commands.json generation for clangd and IDEs
-file(GLOB_RECURSE LOG4YUM_PUBLIC_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/*.hpp")
+file(GLOB_RECURSE lfy_PUBLIC_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/*.hpp")
 set(DUMMY_CPP "${CMAKE_CURRENT_SOURCE_DIR}/src/dummy.cpp")
-add_library(Log4Yum_dummy OBJECT ${LOG4YUM_PUBLIC_HEADERS} ${DUMMY_CPP})
-target_include_directories(Log4Yum_dummy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set_target_properties(Log4Yum_dummy PROPERTIES EXCLUDE_FROM_ALL TRUE EXCLUDE_FROM_DEFAULT_BUILD TRUE)
-add_executable(Log4Yum_dummy_exe $<TARGET_OBJECTS:Log4Yum_dummy>)
+add_library(lfy_dummy OBJECT ${lfy_PUBLIC_HEADERS} ${DUMMY_CPP})
+target_include_directories(lfy_dummy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set_target_properties(lfy_dummy PROPERTIES EXCLUDE_FROM_ALL TRUE EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+add_executable(lfy_dummy_exe $<TARGET_OBJECTS:lfy_dummy>)
 
 # Add RapidJSON as an interface target (header-only)
 add_library(RapidJSON INTERFACE)
@@ -36,7 +36,7 @@ target_include_directories(RapidJSON INTERFACE
 )
 
 # Example: link RapidJSON to your dummy target (add to others as needed)
-target_link_libraries(Log4Yum_dummy PRIVATE RapidJSON)
+target_link_libraries(lfy_dummy PRIVATE RapidJSON)
 
 # Automatically create/update copy for compile_commands.json in project root
 if(CMAKE_EXPORT_COMPILE_COMMANDS)

@@ -7,4 +7,4 @@
 
 #include "Types.hpp"
 
-namespace log4yum {}  // namespace log4yum
+namespace lfy {} // namespace lfy

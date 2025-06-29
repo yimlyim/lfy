@@ -10,7 +10,7 @@
 #include <mutex>
 #include <print>
 
-namespace log4yum {
+namespace lfy {
 
 class Outputter {
 public:
@@ -69,4 +69,4 @@ private:
   std::ofstream m_filestream;
 };
 
-} // namespace log4yum
+} // namespace lfy

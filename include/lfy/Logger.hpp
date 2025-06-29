@@ -15,7 +15,7 @@
 #include "Outputter.hpp"
 #include "Types.hpp"
 
-namespace log4yum {
+namespace lfy {
 
 // Flushing Policies define how the outputter should handle flushing of log
 // messages. It is globally set for all outputters in a logger.
@@ -175,4 +175,4 @@ private:
   std::atomic<FlushingPolicy> m_flushingPolicy{FlushingPolicy::AlwaysFlush};
 };
 
-} // namespace log4yum
+} // namespace lfy
