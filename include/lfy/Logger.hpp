@@ -51,7 +51,7 @@ inline constexpr auto None = [](const auto _) {
 inline constexpr auto AlwaysFlush = [](const auto outputter) {
   outputter->flush();
 };
-inline constexpr auto PeriodicFlush = [](const auto &outputter) {
+inline constexpr auto TimeThresholdFlush = [](const auto &outputter) {
   using OutputterPtr = const void *;
   static std::mutex m;
   static std::unordered_map<OutputterPtr, std::chrono::system_clock::time_point>
@@ -60,7 +60,7 @@ inline constexpr auto PeriodicFlush = [](const auto &outputter) {
   std::lock_guard lock(m);
   auto now = std::chrono::system_clock::now();
   auto &lastFlush = lastFlushMap[static_cast<OutputterPtr>(outputter.get())];
-  if (now - lastFlush >= std::chrono::seconds(2)) {
+  if (now - lastFlush >= std::chrono::seconds(1)) {
     outputter->flush();
     lastFlush = now;
   }
@@ -85,13 +85,11 @@ public:
   }
 };
 
+class Repository;
 class Logger {
+  friend class lfy::Repository;
+
 public:
-  Logger() = default;
-  Logger(std::vector<std::shared_ptr<Outputter>> outputters,
-         std::vector<HeaderGenerator> headerGenerators, LogLevel logLevel)
-      : m_outputters(std::move(outputters)),
-        m_headerGenerators{std::move(headerGenerators)}, m_level{logLevel} {}
   Logger(const Logger &) = delete;
   Logger &operator=(const Logger &) = delete;
 
@@ -185,6 +183,12 @@ public:
   }
 
 private:
+  Logger() = default;
+  Logger(std::vector<std::shared_ptr<Outputter>> outputters,
+         std::vector<HeaderGenerator> headerGenerators, LogLevel logLevel)
+      : m_outputters(std::move(outputters)),
+        m_headerGenerators{std::move(headerGenerators)}, m_level{logLevel} {}
+
   mutable std::mutex m_mutex;
   std::vector<std::shared_ptr<Outputter>> m_outputters;
   std::vector<HeaderGenerator> m_headerGenerators;
@@ -192,7 +196,7 @@ private:
   std::string m_name;
   LogFormatter m_formatter;
   std::atomic<LogLevel> m_level{LogLevel::Info};
-  Flusher m_flushApplier{flushers::PeriodicFlush};
+  Flusher m_flushApplier{flushers::TimeThresholdFlush};
 };
 
 } // namespace lfy
