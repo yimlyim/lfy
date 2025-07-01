@@ -22,8 +22,10 @@ struct LogMetaData;
 using HeaderGenerator = std::function<std::string(const LogMetaData &)>;
 
 struct LogMetaData {
-  explicit LogMetaData(LogLevel level) : m_level{level} {}
+  LogMetaData(std::string name, LogLevel level)
+      : m_loggerName{std::move(name)}, m_level{level} {}
 
+  const std::string m_loggerName;
   const LogLevel m_level;
   const std::chrono::system_clock::time_point m_timestamp{
       std::chrono::system_clock::now()};
@@ -38,6 +40,12 @@ inline constexpr auto Time = [](const LogMetaData &metaData) {
   const std::chrono::time_point now =
       std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
   return std::format("{:%FT%R:%S%Ez}", now);
+};
+
+inline constexpr auto LoggerName = [](const LogMetaData &metaData) {
+  // This is a placeholder, as the logger name is not part of LogMetaData.
+  // In practice, you would pass the logger name as an additional parameter.
+  return metaData.m_loggerName;
 };
 } // namespace headergen
 
@@ -102,40 +110,40 @@ public:
 
   template <typename... Args>
   void debug(std::format_string<Args...> fmt, Args &&...args) {
-    if (m_level < LogLevel::Debug)
+    if (m_level > LogLevel::Debug)
       return;
 
-    LogMetaData metaData{LogLevel::Debug};
+    LogMetaData metaData{getName(), LogLevel::Debug};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
 
   template <typename... Args>
   void info(std::format_string<Args...> fmt, Args &&...args) {
-    if (m_level < LogLevel::Info)
+    if (m_level > LogLevel::Info)
       return;
 
-    LogMetaData metaData{LogLevel::Info};
+    LogMetaData metaData{getName(), LogLevel::Info};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
 
   template <typename... Args>
   void warn(std::format_string<Args...> fmt, Args &&...args) {
-    if (m_level < LogLevel::Warn)
+    if (m_level > LogLevel::Warn)
       return;
 
-    LogMetaData metaData{LogLevel::Warn};
+    LogMetaData metaData{getName(), LogLevel::Warn};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
 
   template <typename... Args>
   void error(std::format_string<Args...> fmt, Args &&...args) {
-    if (m_level < LogLevel::Error)
+    if (m_level > LogLevel::Error)
       return;
 
-    LogMetaData metaData{LogLevel::Error};
+    LogMetaData metaData{getName(), LogLevel::Error};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
@@ -163,7 +171,15 @@ public:
     return *this;
   }
 
-  [[nodiscard]] std::string getName() const { return m_name; }
+  [[nodiscard]] std::string getName() const {
+    std::lock_guard l{m_mutex};
+    return m_name;
+  }
+
+  [[nodiscard]] LogFormatter getFormatter() const {
+    std::lock_guard l{m_mutex};
+    return m_formatter;
+  }
 
   [[nodiscard]] std::vector<std::shared_ptr<Outputter>> getOutputters() const {
     std::lock_guard l{m_mutex};
@@ -184,10 +200,14 @@ public:
 
 private:
   Logger() = default;
+  Logger(const std::string &name) : m_name(name), m_formatter(LogFormatter()) {}
   Logger(std::vector<std::shared_ptr<Outputter>> outputters,
-         std::vector<HeaderGenerator> headerGenerators, LogLevel logLevel)
+         std::vector<HeaderGenerator> headerGenerators, std::string name,
+         LogFormatter formatter, LogLevel logLevel, Flusher flusher)
       : m_outputters(std::move(outputters)),
-        m_headerGenerators{std::move(headerGenerators)}, m_level{logLevel} {}
+        m_headerGenerators(std::move(headerGenerators)),
+        m_name(std::move(name)), m_formatter(std::move(formatter)),
+        m_level(logLevel), m_flushApplier(std::move(flusher)) {}
 
   mutable std::mutex m_mutex;
   std::vector<std::shared_ptr<Outputter>> m_outputters;
