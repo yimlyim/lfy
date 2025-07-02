@@ -106,7 +106,7 @@ public:
     }
 
     // If we reach a leaf node, we can remove it from its parent, to avoid
-    // memory build-up strictly speaking, we could also just set the value to
+    // memory build-up. Strictly speaking, we could also just set the value to
     // nullptr, and never really remove it
     currentNode.get().m_value = nullptr;
     if (currentNode.get().m_children.empty())
