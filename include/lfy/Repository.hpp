@@ -60,6 +60,15 @@ public:
     self.m_loggers.insert(path, logger);
   }
 
+  // Removes a logger from the repository by its path. The loggger will not be
+  // publily accessible anymore
+  void removeLogger(const std::string &path) {
+    Singleton &self = getInstance();
+    std::lock_guard<std::mutex> lock(self.m_mutex);
+
+    self.m_loggers.remove(path);
+  }
+
 private:
   Repository() = default;
   virtual ~Repository() = default;
