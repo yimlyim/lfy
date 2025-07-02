@@ -176,6 +176,11 @@ public:
     return m_name;
   }
 
+  [[nodiscard]] std::string_view getNameView() const {
+    std::lock_guard l{m_mutex};
+    return m_name;
+  }
+
   [[nodiscard]] LogFormatter getFormatter() const {
     std::lock_guard l{m_mutex};
     return m_formatter;
@@ -200,7 +205,7 @@ public:
 
 private:
   Logger() = default;
-  Logger(const std::string &name) : m_name(name), m_formatter(LogFormatter()) {}
+  Logger(std::string name) : m_name{std::move(name)} {}
   Logger(std::vector<std::shared_ptr<Outputter>> outputters,
          std::vector<HeaderGenerator> headerGenerators, std::string name,
          LogFormatter formatter, LogLevel logLevel, Flusher flusher)
@@ -211,10 +216,11 @@ private:
 
   mutable std::mutex m_mutex;
   std::vector<std::shared_ptr<Outputter>> m_outputters;
-  std::vector<HeaderGenerator> m_headerGenerators;
+  std::vector<HeaderGenerator> m_headerGenerators{headergen::Level,
+                                                  headergen::Time};
 
   std::string m_name;
-  LogFormatter m_formatter;
+  LogFormatter m_formatter{};
   std::atomic<LogLevel> m_level{LogLevel::Info};
   Flusher m_flushApplier{flushers::TimeThresholdFlush};
 };
