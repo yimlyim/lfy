@@ -216,13 +216,12 @@ private:
 
   mutable std::mutex m_mutex;
   std::vector<std::shared_ptr<Outputter>> m_outputters;
-  std::vector<HeaderGenerator> m_headerGenerators{headergen::Level,
-                                                  headergen::Time};
+  std::vector<HeaderGenerator> m_headerGenerators;
 
   std::string m_name;
   LogFormatter m_formatter{};
   std::atomic<LogLevel> m_level{LogLevel::Info};
-  Flusher m_flushApplier{flushers::TimeThresholdFlush};
+  Flusher m_flushApplier{flushers::AlwaysFlush};
 };
 
 } // namespace lfy
