@@ -17,6 +17,14 @@
 
 namespace lfy {
 
+namespace details {
+
+inline void safe_fclose(FILE *f) {
+  if (f != nullptr)
+    std::fclose(f);
+}
+} // namespace details
+
 namespace literals {
 
 constexpr std::size_t operator""_KiB(unsigned long long x) { return x << 10; }
@@ -38,6 +46,8 @@ public:
 };
 
 // ConsoleOutputter is fully buffered and flushes standard output.
+// Messages are always either fully buffered or written directly to avoid
+// partial messages between flushes.
 class ConsoleOutputter : public Outputter {
 public:
   ConsoleOutputter(std::size_t bufferSize = 4 * literals::KiB) {
@@ -56,6 +66,13 @@ public:
     // If the buffer is full, flush it before adding new data
     if (m_buffer.size() + message.size() + 1 > m_buffer.capacity())
       flush();
+
+    // Big messages which exceed the buffer size, are written directly to avoid
+    // repeated flushes
+    if (message.size() + 1 > m_buffer.capacity()) {
+      std::fwrite(message.data(), sizeof(char), message.size(), stdout);
+      return;
+    }
 
     m_buffer.insert(m_buffer.end(), message.begin(), message.end());
     m_buffer.insert(m_buffer.end(), '\n');
@@ -85,13 +102,15 @@ private:
 class FileOutputter : public Outputter {
 public:
   explicit FileOutputter(const std::filesystem::path filePath,
-                         std::size_t bufferSize = 16 * literals::KiB)
-      : m_filePath{std::move(filePath)} {
+                         std::size_t bufferSize = 64 * literals::KiB)
+      : m_filePath{std::move(filePath)},
+        m_file{nullptr, &details::safe_fclose} {
     init(bufferSize);
   }
 
   FileOutputter(std::size_t bufferSize, const std::filesystem::path filePath)
-      : m_filePath{std::move(filePath)} {
+      : m_filePath{std::move(filePath)},
+        m_file{nullptr, &details::safe_fclose} {
     init(bufferSize);
   }
 
@@ -99,7 +118,19 @@ public:
   void output(const std::string &message) override {
     std::lock_guard l{m_mutex};
 
-    std::println(m_filestream, "{}", message);
+    // If the buffer is full, flush it before adding new data
+    if (m_buffer.size() + message.size() + 1 > m_buffer.capacity())
+      flush();
+
+    // Big messages which exceed the buffer size, are written directly to avoid
+    // repeated flushes
+    if (message.size() + 1 > m_buffer.capacity()) {
+      std::fwrite(message.data(), sizeof(char), message.size(), m_file.get());
+      return;
+    }
+
+    m_buffer.insert(m_buffer.end(), message.begin(), message.end());
+    m_buffer.insert(m_buffer.end(), '\n');
   }
 
   std::chrono::system_clock::time_point lastFlush() override {
@@ -109,32 +140,36 @@ public:
 
   void flush() override {
     std::lock_guard l{m_mutex};
-    if (!m_filestream.is_open())
-      return;
 
-    m_filestream.flush();
+    std::fwrite(m_buffer.data(), sizeof(char), m_buffer.size(), m_file.get());
+    m_buffer.clear();
+
     m_lastFlush = std::chrono::system_clock::now();
   }
 
 private:
   void init(std::size_t bufferSize) {
-    if (std::filesystem::exists(m_filePath) &&
-        !std::filesystem::is_regular_file(m_filePath))
+    if (!std::filesystem::is_regular_file(m_filePath))
       throw std::runtime_error("FileOutputter: File" + m_filePath.string() +
-                               " does not exist or is not a regular file.");
-    m_filestream.open(m_filePath, std::ios::out | std::ios::app);
-    if (!m_filestream.is_open())
+                               "is not a regular file.");
+
+    m_file = std::unique_ptr<FILE, decltype(&details::safe_fclose)>(
+        std::fopen(m_filePath.string().data(), "a"), &details::safe_fclose);
+
+    if (m_file == nullptr)
       throw std::runtime_error("FileOutputter: Failed to open file " +
                                m_filePath.string());
 
     m_buffer.reserve(bufferSize);
-    m_filestream.rdbuf()->pubsetbuf(m_buffer.data(), m_buffer.capacity());
+    if (setvbuf(m_file.get(), nullptr, _IONBF, 0) != 0)
+      throw std::runtime_error("FileOutputter: Failed to set buffer mode for " +
+                               m_filePath.string());
   }
 
   std::recursive_mutex m_mutex;
   std::filesystem::path m_filePath;
   std::vector<char> m_buffer;
-  std::ofstream m_filestream;
+  std::unique_ptr<FILE, decltype(&details::safe_fclose)> m_file;
   std::chrono::system_clock::time_point m_lastFlush{
       std::chrono::system_clock::now()};
 };
