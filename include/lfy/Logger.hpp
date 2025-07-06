@@ -33,46 +33,51 @@ struct LogMetaData {
 };
 
 namespace headergen {
-inline constexpr auto Level = [](const LogMetaData &metaData) {
-  return std::string{logLevelToString(metaData.m_level)};
-};
-inline constexpr auto Time = [](const LogMetaData &metaData) {
-  const std::chrono::time_point now =
-      std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
-  return std::format("{:%FT%R:%S%Ez}", now);
+
+inline auto Level() {
+  return [](const LogMetaData &metaData) {
+    return std::string{logLevelToString(metaData.m_level)};
+  };
+}
+inline auto Time() {
+  return [](const LogMetaData &metaData) {
+    // Use std::chrono::floor to round down to seconds
+    const std::chrono::time_point now =
+        std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
+    return std::format("{:%FT%R:%S%Ez}", now);
+  };
 };
 
-inline constexpr auto LoggerName = [](const LogMetaData &metaData) {
-  // This is a placeholder, as the logger name is not part of LogMetaData.
-  // In practice, you would pass the logger name as an additional parameter.
-  return metaData.m_loggerName;
+inline auto LoggerName() {
+  return [](const LogMetaData &metaData) { return metaData.m_loggerName; };
 };
+
 } // namespace headergen
 
 using Flusher = std::function<void(const std::shared_ptr<Outputter>)>;
 
 namespace flushers {
-inline constexpr auto None = [](const auto _) {
-  // Flushing is disabled, do nothing. The compiler will optimize this out.
-  return;
+inline constexpr auto NeverFlush() {
+  return [](const auto &) { return; };
 };
-inline constexpr auto AlwaysFlush = [](const auto outputter) {
-  outputter->flush();
-};
-inline constexpr auto TimeThresholdFlush = [](const auto &outputter) {
-  using OutputterPtr = const void *;
-  static std::mutex m;
-  static std::unordered_map<OutputterPtr, std::chrono::system_clock::time_point>
-      lastFlushMap;
 
-  std::lock_guard lock(m);
-  auto now = std::chrono::system_clock::now();
-  auto &lastFlush = lastFlushMap[static_cast<OutputterPtr>(outputter.get())];
-  if (now - lastFlush >= std::chrono::seconds(1)) {
-    outputter->flush();
-    lastFlush = now;
-  }
-};
+inline constexpr auto AlwaysFlush() {
+  return [](const auto outputter) { outputter->flush(); };
+}
+
+inline constexpr auto TimeThresholdFlush(std::size_t time = 1) {
+  return [time](const auto &outputter) {
+    static std::atomic<int> flushCount{0};
+
+    const std::chrono::system_clock::time_point last = outputter->lastFlush();
+    if (std::chrono::system_clock::now() - last >= std::chrono::seconds(time)) {
+      flushCount++;
+      outputter->flush();
+    }
+    std::cerr << "Flush count: " << flushCount.load();
+  };
+}
+
 } // namespace flushers
 
 class LogFormatter {
@@ -221,7 +226,7 @@ private:
   std::string m_name;
   LogFormatter m_formatter{};
   std::atomic<LogLevel> m_level{LogLevel::Info};
-  Flusher m_flushApplier{flushers::AlwaysFlush};
+  Flusher m_flushApplier{flushers::AlwaysFlush()};
 };
 
 } // namespace lfy
