@@ -17,29 +17,6 @@
 
 namespace lfy {
 
-namespace details {
-inline constexpr char header_delim[] = "";
-
-template <const char *Delim, typename... Args>
-inline std::string join(Args &&...strings) {
-  std::string result;
-
-  size_t totalSize = 0;
-  ((totalSize += strings.size()), ...);
-  totalSize += std::min(sizeof...(Args) - 1, sizeof...(Args)) *
-               std::char_traits<char>::length(Delim);
-  result.reserve(totalSize);
-
-  bool first = true;
-  ((first ? (first = false, result.append(strings))
-          : (result.append(Delim), result.append(strings))),
-   ...);
-
-  return result;
-}
-
-} // namespace details
-
 struct LogMetaData;
 // For Thread Safety, never use a lambda which captures a state by reference.
 using HeaderGenerator = std::function<std::string(const LogMetaData &)>;
@@ -64,6 +41,7 @@ inline auto Level() {
 }
 inline auto Time() {
   return [](const LogMetaData &metaData) {
+    // Cache time in second precision to avoid formatting every time
     thread_local static std::string cachedTimeStr;
     thread_local static std::chrono::system_clock::time_point lastTime;
 
@@ -217,12 +195,12 @@ public:
   }
 
   [[nodiscard]] std::string getName() const {
-    std::lock_guard l{m_mutex};
+    // Thread-safe, as it's access to const member variable
     return m_name;
   }
 
   [[nodiscard]] std::string_view getNameView() const {
-    std::lock_guard l{m_mutex};
+    // Thread-safe, as it's acess to const member variable
     return m_name;
   }
 
@@ -263,7 +241,7 @@ private:
   std::vector<std::shared_ptr<Outputter>> m_outputters;
   std::vector<HeaderGenerator> m_headerGenerators;
 
-  std::string m_name;
+  const std::string m_name;
   LogFormatter m_formatter{};
   std::atomic<LogLevel> m_level{LogLevel::Info};
   Flusher m_flushApplier{flushers::AlwaysFlush()};
