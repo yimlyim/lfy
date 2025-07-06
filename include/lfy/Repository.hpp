@@ -11,7 +11,7 @@
 #include <string>
 
 #include "Logger.hpp"
-#include "SegmentTrie.hpp"
+#include "SegmentMap.hpp"
 
 namespace lfy {
 
@@ -19,13 +19,16 @@ namespace details {
 inline constexpr std::string DefaultLoggerName = "";
 } // namespace details
 
+enum class Inheritance { Enabled, Disabled };
+
 class Repository {
 public:
   // Retrieves a logger by its path. For inheritance, if no exact match is
   // found, it will search for the longest prefix match and create a new logger
   // that inherits all settings from the parent logger, if any.
-  static std::shared_ptr<Logger> getLogger(const std::string &path,
-                                           bool inheritFromParent = false) {
+  static std::shared_ptr<Logger>
+  getLogger(const std::string &path,
+            Inheritance inherit = Inheritance::Disabled) {
     Singleton &self = getInstance();
     std::lock_guard<std::mutex> lock(self.m_mutex);
 
@@ -36,7 +39,7 @@ public:
 
     // If there was no exact match and inheritance is requested,
     // create a new logger by inheriting from the longest prefix match (if any)
-    if (inheritFromParent) {
+    if (inherit == Inheritance::Enabled) {
       if (auto parentLogger = self.m_loggers.findByLongestPrefix(path);
           parentLogger != nullptr) {
         auto inheritedLogger = std::shared_ptr<Logger>(new Logger(
@@ -55,7 +58,7 @@ public:
   }
 
   static std::shared_ptr<Logger> getDefaultLogger() {
-    return getLogger(details::DefaultLoggerName, false);
+    return getLogger(details::DefaultLoggerName, Inheritance::Disabled);
   }
 
   // Adds a logger to the repository with the specified path.
@@ -86,7 +89,7 @@ private:
     Singleton(const Singleton &) = delete;
     Singleton &operator=(const Singleton &) = delete;
     std::mutex m_mutex;
-    SegmentTrie<Logger> m_loggers;
+    SegmentMap m_loggers;
   };
 
   static Singleton &getInstance() {
