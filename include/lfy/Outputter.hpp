@@ -37,17 +37,28 @@ public:
   virtual void flush() = 0;
 };
 
+// ConsoleOutputter is fully buffered and flushes standard output.
 class ConsoleOutputter : public Outputter {
 public:
   ConsoleOutputter(std::size_t bufferSize = 4 * literals::KiB) {
     m_buffer.reserve(bufferSize);
-    std::cout.rdbuf()->pubsetbuf(m_buffer.data(), m_buffer.capacity());
   }
-  ~ConsoleOutputter() = default;
+  ~ConsoleOutputter() {
+    std::lock_guard l{m_mutex};
+    // Flush any remaining data in the buffer before destruction
+    if (m_buffer.size() > 0)
+      flush();
+  }
 
   void output(const std::string &message) override {
     std::lock_guard l{m_mutex};
-    std::println("{}", message);
+
+    // If the buffer is full, flush it before adding new data
+    if (m_buffer.size() + message.size() + 1 > m_buffer.capacity())
+      flush();
+
+    m_buffer.insert(m_buffer.end(), message.begin(), message.end());
+    m_buffer.insert(m_buffer.end(), '\n');
   }
 
   std::chrono::system_clock::time_point lastFlush() override {
@@ -57,12 +68,15 @@ public:
 
   void flush() override {
     std::lock_guard l{m_mutex};
-    std::cout.flush();
+
+    std::fwrite(m_buffer.data(), sizeof(char), m_buffer.size(), stdout);
+    m_buffer.clear();
+
     m_lastFlush = std::chrono::system_clock::now();
   }
 
 private:
-  std::mutex m_mutex;
+  std::recursive_mutex m_mutex;
   std::vector<char> m_buffer;
   std::chrono::system_clock::time_point m_lastFlush{
       std::chrono::system_clock::now()};
@@ -117,7 +131,7 @@ private:
     m_filestream.rdbuf()->pubsetbuf(m_buffer.data(), m_buffer.capacity());
   }
 
-  std::mutex m_mutex;
+  std::recursive_mutex m_mutex;
   std::filesystem::path m_filePath;
   std::vector<char> m_buffer;
   std::ofstream m_filestream;
