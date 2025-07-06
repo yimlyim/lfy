@@ -15,6 +15,10 @@
 
 namespace lfy {
 
+namespace details {
+inline constexpr std::string DefaultLoggerName = "";
+} // namespace details
+
 class Repository {
 public:
   // Retrieves a logger by its path. For inheritance, if no exact match is
@@ -48,6 +52,10 @@ public:
     auto newLogger = std::shared_ptr<Logger>(new Logger(path));
     self.m_loggers.insert(path, newLogger);
     return newLogger;
+  }
+
+  static std::shared_ptr<Logger> getDefaultLogger() {
+    return getLogger(details::DefaultLoggerName, false);
   }
 
   // Adds a logger to the repository with the specified path.
