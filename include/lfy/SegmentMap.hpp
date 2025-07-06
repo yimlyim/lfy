@@ -39,6 +39,10 @@ public:
         return it->second;
     }
 
+    // If no prefix match, return the default logger if it exists
+    if (auto defaultLoggerIt = m_map.find(""); defaultLoggerIt != end(m_map))
+      return defaultLoggerIt->second;
+
     return nullptr;
   }
 
