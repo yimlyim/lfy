@@ -17,6 +17,29 @@
 
 namespace lfy {
 
+namespace details {
+inline constexpr char header_delim[] = "";
+
+template <const char *Delim, typename... Args>
+inline std::string join(Args &&...strings) {
+  std::string result;
+
+  size_t totalSize = 0;
+  ((totalSize += strings.size()), ...);
+  totalSize += std::min(sizeof...(Args) - 1, sizeof...(Args)) *
+               std::char_traits<char>::length(Delim);
+  result.reserve(totalSize);
+
+  bool first = true;
+  ((first ? (first = false, result.append(strings))
+          : (result.append(Delim), result.append(strings))),
+   ...);
+
+  return result;
+}
+
+} // namespace details
+
 struct LogMetaData;
 // For Thread Safety, never use a lambda which captures a state by reference.
 using HeaderGenerator = std::function<std::string(const LogMetaData &)>;
@@ -41,10 +64,17 @@ inline auto Level() {
 }
 inline auto Time() {
   return [](const LogMetaData &metaData) {
+    thread_local static std::string cachedTimeStr;
+    thread_local static std::chrono::system_clock::time_point lastTime;
+
     // Use std::chrono::floor to round down to seconds
     const std::chrono::time_point now =
         std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
-    return std::format("{:%FT%R:%S%Ez}", now);
+    if (now - lastTime >= std::chrono::seconds(1)) {
+      lastTime = now;
+      cachedTimeStr = std::format("{:%FT%R:%S%Ez}", now);
+    }
+    return cachedTimeStr;
   };
 };
 
@@ -65,16 +95,15 @@ inline constexpr auto AlwaysFlush() {
   return [](const auto outputter) { outputter->flush(); };
 }
 
-inline constexpr auto TimeThresholdFlush(std::size_t time = 1) {
-  return [time](const auto &outputter) {
-    static std::atomic<int> flushCount{0};
-
-    const std::chrono::system_clock::time_point last = outputter->lastFlush();
-    if (std::chrono::system_clock::now() - last >= std::chrono::seconds(time)) {
-      flushCount++;
+inline constexpr auto
+TimeThresholdFlush(std::chrono::seconds threshold = std::chrono::seconds(1)) {
+  return [threshold](const auto &outputter) {
+    using namespace std::chrono;
+    using namespace std::chrono_literals;
+    const system_clock::time_point now = system_clock::now();
+    const system_clock::time_point last = outputter->lastFlush();
+    if (now - last >= threshold)
       outputter->flush();
-    }
-    std::cerr << "Flush count: " << flushCount.load();
   };
 }
 
@@ -89,12 +118,23 @@ public:
                      const std::vector<HeaderGenerator> &headers,
                      const std::format_string<Args...> &fmt,
                      Args &&...args) const {
-    std::stringstream ss;
-    for (const auto &header : headers)
-      ss << std::format("[{}] ", header(metaData));
 
-    return std::format("{}{}", ss.str(),
-                       std::format(fmt, std::forward<Args>(args)...));
+    size_t estimated_size = 0;
+    constexpr size_t avg_header_len = 32; // date, level, logger name
+    constexpr size_t header_overhead = 4; // "[{}] "
+    constexpr size_t avg_msg_len = 64;    // assumption: mostly short messages
+
+    estimated_size += headers.size() * (avg_header_len + header_overhead);
+    estimated_size += avg_msg_len;
+
+    std::string result;
+    result.reserve(estimated_size);
+    for (const auto &header : headers)
+      std::format_to(std::back_inserter(result), "[{}] ", header(metaData));
+    std::format_to(std::back_inserter(result), "{}",
+                   std::format(fmt, std::forward<Args>(args)...));
+
+    return result;
   }
 };
 
