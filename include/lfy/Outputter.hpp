@@ -4,7 +4,9 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -31,6 +33,7 @@ class Outputter {
 public:
   virtual ~Outputter() = default;
   virtual void output(const std::string &message) = 0;
+  virtual std::chrono::system_clock::time_point lastFlush() = 0;
   virtual void flush() = 0;
 };
 
@@ -44,18 +47,25 @@ public:
 
   void output(const std::string &message) override {
     std::lock_guard l{m_mutex};
-    // Don't use std::print, as it *always* causes flush for terminal output
-    std::cout << message << "\n";
+    std::println("{}", message);
+  }
+
+  std::chrono::system_clock::time_point lastFlush() override {
+    std::lock_guard l{m_mutex};
+    return m_lastFlush;
   }
 
   void flush() override {
     std::lock_guard l{m_mutex};
     std::cout.flush();
+    m_lastFlush = std::chrono::system_clock::now();
   }
 
 private:
   std::mutex m_mutex;
   std::vector<char> m_buffer;
+  std::chrono::system_clock::time_point m_lastFlush{
+      std::chrono::system_clock::now()};
 };
 
 class FileOutputter : public Outputter {
@@ -63,6 +73,37 @@ public:
   explicit FileOutputter(const std::filesystem::path filePath,
                          std::size_t bufferSize = 16 * literals::KiB)
       : m_filePath{std::move(filePath)} {
+    init(bufferSize);
+  }
+
+  FileOutputter(std::size_t bufferSize, const std::filesystem::path filePath)
+      : m_filePath{std::move(filePath)} {
+    init(bufferSize);
+  }
+
+  ~FileOutputter() = default;
+  void output(const std::string &message) override {
+    std::lock_guard l{m_mutex};
+
+    std::println(m_filestream, "{}", message);
+  }
+
+  std::chrono::system_clock::time_point lastFlush() override {
+    std::lock_guard l{m_mutex};
+    return m_lastFlush;
+  }
+
+  void flush() override {
+    std::lock_guard l{m_mutex};
+    if (!m_filestream.is_open())
+      return;
+
+    m_filestream.flush();
+    m_lastFlush = std::chrono::system_clock::now();
+  }
+
+private:
+  void init(std::size_t bufferSize) {
     if (std::filesystem::exists(m_filePath) &&
         !std::filesystem::is_regular_file(m_filePath))
       throw std::runtime_error("FileOutputter: File" + m_filePath.string() +
@@ -76,24 +117,24 @@ public:
     m_filestream.rdbuf()->pubsetbuf(m_buffer.data(), m_buffer.capacity());
   }
 
-  ~FileOutputter() = default;
-  void output(const std::string &message) override {
-    std::lock_guard l{m_mutex};
-
-    std::println(m_filestream, "{}", message);
-  }
-
-  void flush() override {
-    std::lock_guard l{m_mutex};
-    if (m_filestream.is_open())
-      m_filestream.flush();
-  }
-
-private:
   std::mutex m_mutex;
   std::filesystem::path m_filePath;
   std::vector<char> m_buffer;
   std::ofstream m_filestream;
+  std::chrono::system_clock::time_point m_lastFlush{
+      std::chrono::system_clock::now()};
 };
+
+namespace outputters {
+
+template <typename... Args> inline auto Console(Args &&...args) {
+  return std::make_shared<ConsoleOutputter>(std::forward<Args>(args)...);
+}
+
+template <typename... Args> inline auto File(Args &&...args) {
+  return std::make_shared<FileOutputter>(std::forward<Args>(args)...);
+};
+
+} // namespace outputters
 
 } // namespace lfy
