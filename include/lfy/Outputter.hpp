@@ -174,6 +174,13 @@ private:
       std::chrono::system_clock::now()};
 };
 
+class MemoryOutputter : public Outputter {
+  // Todo, implement MemoryOutputter
+  // Either own a memory buffer or use a shared buffer
+  // If own buffer, think about how to allow exposure of the buffer to
+  // consumers without breaking encapsulation.
+};
+
 namespace outputters {
 
 template <typename... Args> inline auto Console(Args &&...args) {
