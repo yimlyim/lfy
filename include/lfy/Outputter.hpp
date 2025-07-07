@@ -114,7 +114,12 @@ public:
     init(bufferSize);
   }
 
-  ~FileOutputter() = default;
+  ~FileOutputter() {
+    std::lock_guard l{m_mutex};
+    // Flush any remaining data in the buffer before destruction
+    if (m_buffer.size() > 0)
+      flush();
+  }
   void output(const std::string &message) override {
     std::lock_guard l{m_mutex};
 
