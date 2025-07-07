@@ -18,9 +18,50 @@
 
 namespace lfy {
 
+struct LogMetaData;
 enum class TimeType { Local, Utc };
 
-struct LogMetaData;
+namespace details {
+
+inline std::string resolveTimeZoneOffset(const std::string &fmt, std::time_t t,
+                                         TimeType timeType) {
+  std::string result = fmt;
+  std::string tz_offset;
+  if (result.find("%z") != std::string::npos) {
+    if (timeType == TimeType::Utc) {
+      tz_offset = "+0000";
+    } else {
+      std::tm tm_local, tm_utc;
+#if defined(_WIN32)
+      localtime_s(&tm_local, &t);
+      gmtime_s(&tm_utc, &t);
+#else
+      localtime_r(&t, &tm_local);
+      gmtime_r(&t, &tm_utc);
+#endif
+      int offset =
+          static_cast<int>(std::mktime(&tm_local) - std::mktime(&tm_utc));
+      char sign = (offset >= 0) ? '+' : '-';
+      offset = std::abs(offset);
+      int hours = offset / 3600;
+      int minutes = (offset % 3600) / 60;
+      std::ostringstream oss;
+      oss << sign << std::setw(2) << std::setfill('0') << hours << std::setw(2)
+          << std::setfill('0') << minutes;
+      tz_offset = oss.str();
+    }
+    // Replace all occurrences of %z
+    size_t pos = 0;
+    while ((pos = result.find("%z", pos)) != std::string::npos) {
+      result.replace(pos, 2, tz_offset);
+      pos += tz_offset.length();
+    }
+  }
+  return result;
+}
+
+} // namespace details
+
 // For Thread Safety, never use a lambda which captures a state by reference.
 using HeaderGenerator = std::function<std::string(const LogMetaData &)>;
 
@@ -69,7 +110,8 @@ inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
     else
       localtime_r(&t, &tm); // POSIX
 #endif
-    oss << std::put_time(&tm, fmt.data());
+    std::string replacedFmt = details::resolveTimeZoneOffset(fmt, t, timeType);
+    oss << std::put_time(&tm, replacedFmt.data());
     cachedTimes[fmt] = {oss.str(), now};
   }
   return cachedTimes[fmt].first;
