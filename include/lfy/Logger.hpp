@@ -5,6 +5,7 @@
 #include <chrono>
 #include <format>
 #include <functional>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -16,6 +17,8 @@
 #include "Types.hpp"
 
 namespace lfy {
+
+enum class TimeType { Local, Utc };
 
 struct LogMetaData;
 // For Thread Safety, never use a lambda which captures a state by reference.
@@ -39,22 +42,45 @@ inline auto Level() {
     return std::string{logLevelToString(metaData.m_level)};
   };
 }
-inline auto Time() {
-  return [](const LogMetaData &metaData) {
-    // Cache time in second precision to avoid formatting every time
-    thread_local static std::string cachedTimeStr;
-    thread_local static std::chrono::system_clock::time_point lastTime;
 
-    // Use std::chrono::floor to round down to seconds
-    const std::chrono::time_point now =
-        std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
-    if (now - lastTime >= std::chrono::seconds(1)) {
-      lastTime = now;
-      cachedTimeStr = std::format("{:%FT%R:%S%Ez}", now);
-    }
-    return cachedTimeStr;
+inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
+                          TimeType timeType) {
+  using CachedTime =
+      std::pair<std::string, std::chrono::system_clock::time_point>;
+  thread_local static std::unordered_map<std::string, CachedTime> cachedTimes;
+
+  const auto now =
+      std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
+  const auto last = (cachedTimes.find(fmt) != cachedTimes.end())
+                        ? cachedTimes[fmt].second
+                        : std::chrono::system_clock::time_point{};
+  if (now - last >= std::chrono::seconds(1)) {
+    std::ostringstream oss;
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm;
+#if defined(_WIN32)
+    if (timeType == TimeType::Utc)
+      gmtime_s(&tm, &t); // Windows
+    else
+      localtime_s(&tm, &t); // Windows
+#else
+    if (timeType == TimeType::Utc)
+      gmtime_r(&t, &tm); // POSIX
+    else
+      localtime_r(&t, &tm); // POSIX
+#endif
+    oss << std::put_time(&tm, fmt.data());
+    cachedTimes[fmt] = {oss.str(), now};
+  }
+  return cachedTimes[fmt].first;
+}
+
+inline auto Time(TimeType timeType = TimeType::Local,
+                 std::string fmt = "%Y-%m-%dT%H:%M:%S%z") {
+  return [fmt, timeType](const LogMetaData &metaData) {
+    return _InternalTime(fmt, metaData, timeType);
   };
-};
+}
 
 inline auto LoggerName() {
   return [](const LogMetaData &metaData) { return metaData.m_loggerName; };
