@@ -154,12 +154,12 @@ public:
 
 private:
   void init(std::size_t bufferSize) {
-    if (!std::filesystem::is_regular_file(m_filePath))
-      throw std::runtime_error("FileOutputter: File" + m_filePath.string() +
-                               "is not a regular file.");
-
     m_file = std::unique_ptr<FILE, decltype(&details::safe_fclose)>(
         std::fopen(m_filePath.string().data(), "a"), &details::safe_fclose);
+
+    if (!std::filesystem::is_regular_file(m_filePath))
+      throw std::runtime_error("FileOutputter: File " + m_filePath.string() +
+                               " is not a regular file.");
 
     if (m_file == nullptr)
       throw std::runtime_error("FileOutputter: Failed to open file " +
