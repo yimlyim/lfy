@@ -86,15 +86,21 @@ inline auto Level() {
 
 inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
                           TimeType timeType) {
+  // Caches a specific time format string to the last formatted time e.g. fmt:
+  // "%Y-%m-%dT%H:%M:%S%z" -> ("2024-10-05T14:23:45+0200",
+  // TimePoint(2024-10-05T14:23:45))
   using CachedTime =
       std::pair<std::string, std::chrono::system_clock::time_point>;
   thread_local static std::unordered_map<std::string, CachedTime> cachedTimes;
 
+  // The idea is the following: The first time this function is called with a
+  // specific format string, we default construct the "last" time point to
+  // epoch (1970-01-01). This guarantees that the difference between "now" and
+  // "last" is always greater than one second, for the first call.
   const auto now =
       std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
-  const auto last = (cachedTimes.find(fmt) != cachedTimes.end())
-                        ? cachedTimes[fmt].second
-                        : std::chrono::system_clock::time_point{};
+  const auto last = cachedTimes[fmt].second;
+
   if (now - last >= std::chrono::seconds(1)) {
     std::ostringstream oss;
     std::time_t t = std::chrono::system_clock::to_time_t(now);
