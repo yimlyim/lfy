@@ -42,10 +42,10 @@ public:
     if (inherit == Inheritance::Enabled) {
       if (auto parentLogger = self.m_loggers.findByLongestPrefix(path);
           parentLogger != nullptr) {
-        auto inheritedLogger = std::shared_ptr<Logger>(new Logger(
+        auto inheritedLogger = std::shared_ptr<Logger>(new Logger{
             parentLogger->getOutputters(), parentLogger->getHeaderGenerators(),
             path, parentLogger->getFormatter(), parentLogger->getLogLevel(),
-            parentLogger->getFlusher()));
+            parentLogger->getFlusher()});
         self.m_loggers.insert(path, inheritedLogger);
         return inheritedLogger;
       }
