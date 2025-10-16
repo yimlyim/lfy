@@ -8,11 +8,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iostream>
 #include <mutex>
-#include <print>
 #include <vector>
 
 namespace lfy {
