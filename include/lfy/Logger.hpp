@@ -221,11 +221,15 @@ public:
 
     std::string result;
     result.reserve(estimated_size);
-    for (const auto &header : headers)
-      std::format_to(std::back_inserter(result), "[{}] ", header(metaData));
-    std::format_to(std::back_inserter(result), "{}",
-                   std::format(fmt, std::forward<Args>(args)...));
+    for (const auto &headerGenerator : headers) {
+      const std::string header = headerGenerator(metaData);
+      result.push_back('[');
+      result.append(header);
+      result.append("] ");
+    }
 
+    std::format_to(std::back_inserter(result), fmt,
+                   std::forward<Args>(args)...);
     return result;
   }
 };
