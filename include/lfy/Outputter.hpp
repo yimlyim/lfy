@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 
 namespace lfy {
@@ -37,7 +38,7 @@ class Outputter {
 public:
   virtual ~Outputter() = default;
   virtual void output(const std::string &message) = 0;
-  virtual std::chrono::system_clock::time_point lastFlush() = 0;
+  virtual std::chrono::steady_clock::time_point lastFlush() = 0;
   virtual void flush() = 0;
 };
 
@@ -52,8 +53,10 @@ public:
   ~ConsoleOutputter() {
     std::lock_guard l{m_mutex};
     // Flush any remaining data in the buffer before destruction
-    if (m_buffer.size() > 0)
-      flush();
+    if (m_buffer.empty())
+      return;
+    std::fwrite(m_buffer.data(), 1, m_buffer.size(), stdout);
+    std::fflush(stdout);
   }
 
   void output(const std::string &message) override {
@@ -61,10 +64,10 @@ public:
 
     // If the buffer is full, flush it before adding new data
     if (m_buffer.size() + message.size() + 1 > m_buffer.capacity())
-      flush();
+      flushUnlocked();
 
-    // Big messages which exceed the buffer size, are written directly to avoid
-    // repeated flushes
+    // Big messages which exceed the buffer size, are written directly to
+    // avoid repeated flushes
     if (message.size() + 1 > m_buffer.capacity()) {
       std::fwrite(message.data(), sizeof(char), message.size(), stdout);
       return;
@@ -74,25 +77,30 @@ public:
     m_buffer.insert(m_buffer.end(), '\n');
   }
 
-  std::chrono::system_clock::time_point lastFlush() override {
+  std::chrono::steady_clock::time_point lastFlush() override {
     std::lock_guard l{m_mutex};
     return m_lastFlush;
   }
 
   void flush() override {
     std::lock_guard l{m_mutex};
-
-    std::fwrite(m_buffer.data(), sizeof(char), m_buffer.size(), stdout);
-    m_buffer.clear();
-
-    m_lastFlush = std::chrono::system_clock::now();
+    flushUnlocked();
   }
 
 private:
-  std::recursive_mutex m_mutex;
+  void flushUnlocked() {
+    if (m_buffer.empty())
+      return;
+    std::fwrite(m_buffer.data(), 1, m_buffer.size(), stdout);
+    std::fflush(stdout);
+    m_buffer.clear();
+    m_lastFlush = std::chrono::steady_clock::now();
+  }
+
+  std::mutex m_mutex;
   std::vector<char> m_buffer;
-  std::chrono::system_clock::time_point m_lastFlush{
-      std::chrono::system_clock::now()};
+  std::chrono::steady_clock::time_point m_lastFlush{
+      std::chrono::steady_clock::now()};
 };
 
 class FileOutputter : public Outputter {
@@ -113,20 +121,24 @@ public:
   ~FileOutputter() {
     std::lock_guard l{m_mutex};
     // Flush any remaining data in the buffer before destruction
-    if (m_buffer.size() > 0)
-      flush();
+    if (m_buffer.empty())
+      return;
+    std::fwrite(m_buffer.data(), sizeof(char), m_buffer.size(), m_file.get());
   }
   void output(const std::string &message) override {
     std::lock_guard l{m_mutex};
 
     // If the buffer is full, flush it before adding new data
     if (m_buffer.size() + message.size() + 1 > m_buffer.capacity())
-      flush();
+      flushUnlocked();
 
-    // Big messages which exceed the buffer size, are written directly to avoid
-    // repeated flushes
+    // Big messages which exceed the buffer size, are written directly to
+    // avoid repeated flushes
+    // Todo possibly optimize away two fwrite calls
     if (message.size() + 1 > m_buffer.capacity()) {
-      std::fwrite(message.data(), sizeof(char), message.size(), m_file.get());
+      std::fwrite(message.data(), 1, message.size(), m_file.get());
+      std::fwrite("\n", 1, 1, m_file.get());
+      m_lastFlush = std::chrono::steady_clock::now();
       return;
     }
 
@@ -134,32 +146,34 @@ public:
     m_buffer.insert(m_buffer.end(), '\n');
   }
 
-  std::chrono::system_clock::time_point lastFlush() override {
+  std::chrono::steady_clock::time_point lastFlush() override {
     std::lock_guard l{m_mutex};
     return m_lastFlush;
   }
 
   void flush() override {
     std::lock_guard l{m_mutex};
-
-    std::fwrite(m_buffer.data(), sizeof(char), m_buffer.size(), m_file.get());
-    m_buffer.clear();
-
-    m_lastFlush = std::chrono::system_clock::now();
+    flushUnlocked();
   }
 
 private:
+  void flushUnlocked() {
+    if (m_buffer.empty())
+      return;
+    std::fwrite(m_buffer.data(), 1, m_buffer.size(), m_file.get());
+    m_buffer.clear();
+    m_lastFlush = std::chrono::steady_clock::now();
+  }
+
   void init(std::size_t bufferSize) {
+
     m_file = std::unique_ptr<FILE, decltype(&details::safe_fclose)>(
         std::fopen(m_filePath.string().data(), "a"), &details::safe_fclose);
-
-    if (!std::filesystem::is_regular_file(m_filePath))
-      throw std::runtime_error("FileOutputter: File " + m_filePath.string() +
-                               " is not a regular file.");
-
     if (m_file == nullptr)
-      throw std::runtime_error("FileOutputter: Failed to open file " +
-                               m_filePath.string());
+      throw std::runtime_error(
+          "FileOutputter: Failed to open file " + m_filePath.string() +
+          (std::filesystem::exists(m_filePath) ? "(Not enough acess rights)"
+                                               : ""));
 
     m_buffer.reserve(bufferSize);
     if (setvbuf(m_file.get(), nullptr, _IONBF, 0) != 0)
@@ -167,12 +181,12 @@ private:
                                m_filePath.string());
   }
 
-  std::recursive_mutex m_mutex;
+  std::mutex m_mutex;
   std::filesystem::path m_filePath;
   std::vector<char> m_buffer;
   std::unique_ptr<FILE, decltype(&details::safe_fclose)> m_file;
-  std::chrono::system_clock::time_point m_lastFlush{
-      std::chrono::system_clock::now()};
+  std::chrono::steady_clock::time_point m_lastFlush{
+      std::chrono::steady_clock::now()};
 };
 
 class MemoryOutputter : public Outputter {
