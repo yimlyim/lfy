@@ -5,13 +5,9 @@
 #include <chrono>
 #include <format>
 #include <functional>
-#include <iomanip>
 #include <memory>
 #include <mutex>
-#include <sstream>
 #include <string>
-#include <thread>
-#include <unordered_map>
 #include <vector>
 
 #include "Outputter.hpp"
