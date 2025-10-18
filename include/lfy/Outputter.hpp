@@ -69,7 +69,10 @@ public:
     // Big messages which exceed the buffer size, are written directly to
     // avoid repeated flushes
     if (message.size() + 1 > m_buffer.capacity()) {
-      std::fwrite(message.data(), sizeof(char), message.size(), stdout);
+      std::fwrite(message.data(), 1, message.size(), stdout);
+      std::fwrite("\n", 1, 1, stdout);
+      std::fflush(stdout);
+      m_lastFlush = std::chrono::steady_clock::now();
       return;
     }
 
