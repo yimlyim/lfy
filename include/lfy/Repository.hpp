@@ -46,14 +46,14 @@ public:
             parentLogger->getOutputters(), parentLogger->getHeaderGenerators(),
             path, parentLogger->getFormatter(), parentLogger->getLogLevel(),
             parentLogger->getFlusher()});
-        self.m_loggers.insert(path, inheritedLogger);
+        self.m_loggers.insert(inheritedLogger);
         return inheritedLogger;
       }
     }
 
     // Create a new logger if none found or inherited
     auto newLogger = std::shared_ptr<Logger>(new Logger(path));
-    self.m_loggers.insert(path, newLogger);
+    self.m_loggers.insert(newLogger);
     return newLogger;
   }
 
@@ -63,16 +63,15 @@ public:
 
   // Adds a logger to the repository with the specified path.
   // If a logger with the same path already exists, it will be overwritten.
-  static void addLogger(const std::string &path,
-                        std::shared_ptr<Logger> logger) {
+  static void addLogger(std::shared_ptr<Logger> logger) {
     Singleton &self = getInstance();
     std::lock_guard<std::mutex> lock(self.m_mutex);
 
-    self.m_loggers.insert(path, logger);
+    self.m_loggers.insert(logger);
   }
 
-  // Removes a logger from the repository by its path. The loggger will not be
-  // publily accessible anymore
+  // Removes a logger from the repository by its path.
+  // The logger will not be publicly accessible anymore
   void removeLogger(const std::string &path) {
     Singleton &self = getInstance();
     std::lock_guard<std::mutex> lock(self.m_mutex);
