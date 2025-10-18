@@ -364,13 +364,8 @@ public:
     return *this;
   }
 
-  [[nodiscard]] std::string getName() const {
-    // Thread-safe, as it's access to const member variable
-    return m_name;
-  }
-
-  [[nodiscard]] std::string_view getNameView() const {
-    // Thread-safe, as it's acess to const member variable
+  [[nodiscard]] const std::string &getName() const {
+    // Thread-safe, as it's access to immutable member variable
     return m_name;
   }
 
@@ -414,7 +409,7 @@ private:
   const std::string m_name;
   LogFormatter m_formatter{};
   std::atomic<LogLevel> m_level{LogLevel::Info};
-  Flusher m_flushApplier{flushers::AlwaysFlush()};
+  Flusher m_flushApplier{flushers::NeverFlush()};
 };
 
 } // namespace lfy
