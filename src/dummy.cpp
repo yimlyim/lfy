@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "lfy/Format.hpp"
+#include "lfy/HeaderGen.hpp"
 #include "lfy/Logger.hpp"
 #include "lfy/Outputter.hpp"
 #include "lfy/Repository.hpp"
@@ -19,9 +20,9 @@ int main() {
   using namespace std::chrono_literals;
 
   auto defaultLogger = Repository::getDefaultLogger();
-  defaultLogger->addOutputter(outputters::File(16_MiB, "output.txt"))
+  defaultLogger->addOutputter(outputters::File(4_KiB, "output.txt"))
+      .addHeaderGenerator(headergen::Time())
       .setFlusher(flushers::NeverFlush());
-  defaultLogger->seal();
 
   std::shared_ptr<Logger> logger =
       Repository::getLogger("dummy_logger", Inheritance::Enabled);
@@ -42,7 +43,7 @@ Donec fringilla dui sed augue pretium, nec scelerisque est maximus. Nullam conva
 nisi turpis ornare nisl, sit amet volutpat neque massa eu odio. Maecenas malesuada quam ex, posuere congue nibh turpis duis.)";
 
   for (int i = 0; i < 1000000; ++i)
-    logger->info("{} {}", msg, i);
+    logger->info("This is the {}'th message!", i);
 
   std::chrono::time_point end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed = end - start;
