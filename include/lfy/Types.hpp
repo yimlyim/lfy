@@ -8,7 +8,6 @@
 #include <string_view>
 #include <thread>
 
-
 namespace lfy {
 
 enum class LogLevel {
@@ -20,10 +19,10 @@ enum class LogLevel {
 };
 
 struct LogMetaData {
-  LogMetaData(std::string name, LogLevel level)
-      : m_loggerName{std::move(name)}, m_level{level} {}
+  LogMetaData(const std::string &name, LogLevel level)
+      : m_loggerName{name}, m_level{level} {}
 
-  const std::string m_loggerName;
+  const std::string &m_loggerName;
   const LogLevel m_level;
   const std::chrono::system_clock::time_point m_timestamp{
       std::chrono::system_clock::now()};

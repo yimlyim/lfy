@@ -58,13 +58,13 @@ inline std::tm toPlatformSpecificTm(std::time_t t, TimeType timeType) {
 
 inline std::string toNumericUtcOffset(int offsetInMinutes) {
   if (offsetInMinutes == 0)
-    return "+0000";
+    return "+00:00";
 
   char sign = (offsetInMinutes >= 0) ? '+' : '-';
   offsetInMinutes = std::abs(offsetInMinutes);
   int hours = offsetInMinutes / 60;
   int minutes = offsetInMinutes % 60;
-  return std::format("{}{:02}{:02}", sign, hours, minutes);
+  return std::format("{}{:02}:{:02}", sign, hours, minutes);
 }
 
 inline int getTimeZoneOffsetInMinutes(const std::tm &time) {
@@ -103,13 +103,13 @@ inline std::string toFormattedTime(const std::string &fmt, const std::tm &tm,
 namespace headergen {
 
 inline auto Level() {
-  return [](const LogMetaData &metaData) {
-    return std::string{logLevelToString(metaData.m_level)};
+  return [](const LogMetaData &metaData, std::string &buffer) {
+    buffer.append(logLevelToString(metaData.m_level));
   };
 }
 
 inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
-                          TimeType timeType) {
+                          TimeType timeType, std::string &buffer) {
   // Caches a specific time format string to the last formatted time e.g. fmt:
   // "%Y-%m-%dT%H:%M:%S%z" -> ("2024-10-05T14:23:45+0200",
   // TimePoint(2024-10-05T14:23:45))
@@ -126,8 +126,10 @@ inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
       std::chrono::floor<std::chrono::seconds>(metaData.m_timestamp);
   const auto last = cachedTime.lastTimePoint;
 
-  if (now - last < literals::timeStampRefreshInterval)
-    return cachedTime.lastFormattedTime;
+  if (now - last < literals::timeStampRefreshInterval) {
+    buffer.append(cachedTime.lastFormattedTime);
+    return;
+  }
 
   const std::time_t t = std::chrono::system_clock::to_time_t(now);
   const std::tm tm = details::toPlatformSpecificTm(t, timeType);
@@ -139,18 +141,20 @@ inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
   std::string formattedTime = details::toFormattedTime(
       fmt, tm, (timeType == TimeType::Local) ? cachedLocalTimeZoneOffset : 0);
   cachedTime = details::TimeCache{std::move(formattedTime), now};
-  return cachedTime.lastFormattedTime;
+  buffer.append(cachedTime.lastFormattedTime);
 }
 
 inline auto Time(TimeType timeType = TimeType::Local,
                  std::string fmt = "%Y-%m-%dT%H:%M:%S%z") {
-  return [fmt, timeType](const LogMetaData &metaData) {
-    return _InternalTime(fmt, metaData, timeType);
+  return [fmt, timeType](const LogMetaData &metaData, std::string &buffer) {
+    return _InternalTime(fmt, metaData, timeType, buffer);
   };
 }
 
 inline auto LoggerName() {
-  return [](const LogMetaData &metaData) { return metaData.m_loggerName; };
+  return [](const LogMetaData &metaData, std::string &buffer) {
+    buffer.append(metaData.m_loggerName);
+  };
 };
 
 } // namespace headergen

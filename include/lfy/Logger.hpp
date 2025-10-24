@@ -16,7 +16,8 @@
 namespace lfy {
 
 // For Thread Safety, never use a lambda which captures a state by reference.
-using HeaderGenerator = std::function<std::string(const LogMetaData &)>;
+using HeaderGenerator =
+    std::function<void(const LogMetaData &, std::string &buffer)>;
 
 using Flusher = std::function<void(const std::shared_ptr<Outputter>)>;
 
@@ -64,10 +65,9 @@ public:
     std::string result;
     result.reserve(estimated_size);
     for (const auto &headerGenerator : headers) {
-      const std::string header = headerGenerator(metaData);
       result.push_back('[');
-      result.append(header);
-      result.append("] ");
+      headerGenerator(metaData, result);
+      result.push_back(']');
     }
 
     std::format_to(std::back_inserter(result), fmt,
@@ -90,9 +90,8 @@ public:
     std::string result;
     result.reserve(estimated_size);
     for (const auto &headerGenerator : headers) {
-      const std::string header = headerGenerator(metaData);
       result.push_back('[');
-      result.append(header);
+      headerGenerator(metaData, result);
       result.append("] ");
     }
     result.append(msg);
