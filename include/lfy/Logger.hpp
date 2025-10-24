@@ -67,9 +67,8 @@ public:
     for (const auto &headerGenerator : headers) {
       result.push_back('[');
       headerGenerator(metaData, result);
-      result.push_back(']');
+      result.append("] ");
     }
-
     std::format_to(std::back_inserter(result), fmt,
                    std::forward<Args>(args)...);
     return result;
@@ -118,7 +117,7 @@ public:
   void debug(std::format_string<Args...> fmt, Args &&...args) {
     if (m_level > LogLevel::Debug)
       return;
-    LogMetaData metaData{getName(), LogLevel::Debug};
+    LogMetaData metaData{m_name, LogLevel::Debug};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
@@ -127,7 +126,7 @@ public:
   void debug(const std::string &message) {
     if (m_level > LogLevel::Debug)
       return;
-    LogMetaData metaData{getName(), LogLevel::Debug};
+    LogMetaData metaData{m_name, LogLevel::Debug};
     log(m_formatter.formatPlain(metaData, m_headerGenerators, message));
   }
 
@@ -135,7 +134,7 @@ public:
   void info(std::format_string<Args...> fmt, Args &&...args) {
     if (m_level > LogLevel::Info)
       return;
-    LogMetaData metaData{getName(), LogLevel::Info};
+    LogMetaData metaData{m_name, LogLevel::Info};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
@@ -144,7 +143,7 @@ public:
   void info(const std::string &message) {
     if (m_level > LogLevel::Info)
       return;
-    LogMetaData metaData{getName(), LogLevel::Info};
+    LogMetaData metaData{m_name, LogLevel::Info};
     log(m_formatter.formatPlain(metaData, m_headerGenerators, message));
   }
 
@@ -152,7 +151,7 @@ public:
   void warn(std::format_string<Args...> fmt, Args &&...args) {
     if (m_level > LogLevel::Warn)
       return;
-    LogMetaData metaData{getName(), LogLevel::Warn};
+    LogMetaData metaData{m_name, LogLevel::Warn};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
@@ -161,7 +160,7 @@ public:
   void warn(const std::string &message) {
     if (m_level > LogLevel::Warn)
       return;
-    LogMetaData metaData{getName(), LogLevel::Warn};
+    LogMetaData metaData{m_name, LogLevel::Warn};
     log(m_formatter.formatPlain(metaData, m_headerGenerators, message));
   }
 
@@ -169,7 +168,7 @@ public:
   void error(std::format_string<Args...> fmt, Args &&...args) {
     if (m_level > LogLevel::Error)
       return;
-    LogMetaData metaData{getName(), LogLevel::Error};
+    LogMetaData metaData{m_name, LogLevel::Error};
     log(m_formatter.format(metaData, m_headerGenerators, fmt,
                            std::forward<Args>(args)...));
   };
@@ -178,7 +177,7 @@ public:
   void error(const std::string &message) {
     if (m_level > LogLevel::Error)
       return;
-    LogMetaData metaData{getName(), LogLevel::Error};
+    LogMetaData metaData{m_name, LogLevel::Error};
     log(m_formatter.formatPlain(metaData, m_headerGenerators, message));
   }
 
