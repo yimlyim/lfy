@@ -2,7 +2,9 @@
 #pragma once
 
 #include <ctime>
-#include <unistd.h>
+#include <time.h>
+
+namespace lfy {
 
 namespace details {
 
@@ -28,3 +30,5 @@ inline int getLocalTimeZoneOffsetMinutes(const std::tm &localTm) {
 }
 
 } // namespace details
+
+} // namespace lfy
