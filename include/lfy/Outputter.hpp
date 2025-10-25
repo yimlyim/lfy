@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
@@ -13,37 +14,14 @@
 #include <stdexcept>
 #include <vector>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
-#ifdef __linux__
-#include <unistd.h>
-#endif
+#include "details/NativeFileHandleWrapper.hpp"
 
 namespace lfy {
 
 template <std::size_t N> struct BufferCapacity {};
 
-namespace details {
-
-inline void safe_fclose(FILE *f) {
-  if (f != nullptr)
-    std::fclose(f);
-}
-
-inline void write(const void *begin, size_t size, size_t numOfElements,
-                  FILE *m_file) {
-#if defined(_WIN32)
-  _fwrite_nolock(begin, size, numOfElements, m_file);
-#elif defined(__linux__)
-  fwrite_unlocked(begin, size, numOfElements, m_file);
-#else
-  fwrite(begin, size, numOfElements, m_file);
-#endif
-}
-
-} // namespace details
+// Platform-specific NativeFile and helper functions live in detail headers.
+namespace details {} // namespace details
 
 namespace literals {
 
@@ -132,9 +110,7 @@ private:
 template <size_t N> class FileOutputter : public Outputter {
 public:
   FileOutputter(std::filesystem::path filePath)
-      : m_filePath{std::move(filePath)},
-        m_file{std::fopen(m_filePath.string().data(), "a"),
-               &details::safe_fclose} {
+      : m_filePath{std::move(filePath)} {
     init();
   }
 
@@ -143,8 +119,8 @@ public:
     // Flush any remaining data in the buffer before destruction
     if (m_bufferWriteIndex == 0)
       return;
-    details::write(m_buffer.data(), sizeof(char), m_bufferWriteIndex,
-                   m_file.get());
+    details::write_bytes(m_file, m_buffer.data(), m_bufferWriteIndex);
+    details::close_native(m_file);
   }
   void output(const std::string &message) override {
     std::lock_guard l{m_mutex};
@@ -157,9 +133,9 @@ public:
     // avoid repeated flushes
     // Todo possibly optimize away two fwrite calls
     if (message.size() + 1 > m_buffer.size()) {
-      details::write(message.data(), sizeof(char), message.size(),
-                     m_file.get());
-      details::write("\n", sizeof(char), 1, m_file.get());
+      // Atomic append of message + newline without copying entire buffer on
+      // POSIX; Windows builds temp
+      details::write_line(m_file, message.data(), message.size());
       m_lastFlush = std::chrono::steady_clock::now();
       m_bufferWriteIndex = 0;
       return;
@@ -184,27 +160,24 @@ private:
   void flushUnlocked() {
     if (m_bufferWriteIndex == 0)
       return;
-    details::write(m_buffer.data(), sizeof(char), m_bufferWriteIndex,
-                   m_file.get());
+    details::write_bytes(m_file, m_buffer.data(), m_bufferWriteIndex);
     m_bufferWriteIndex = 0;
     m_lastFlush = std::chrono::steady_clock::now();
   }
 
   void init() {
-    if (m_file == nullptr)
+    m_file = details::open_for_append(m_filePath);
+    if (!details::valid(m_file)) {
       throw std::runtime_error(
           "FileOutputter: Failed to open file " + m_filePath.string() +
-          (std::filesystem::exists(m_filePath) ? "(Not enough acess rights)"
+          (std::filesystem::exists(m_filePath) ? " (Not enough access rights)"
                                                : ""));
-
-    if (setvbuf(m_file.get(), nullptr, _IONBF, 0) != 0)
-      throw std::runtime_error("FileOutputter: Failed to set buffer mode for " +
-                               m_filePath.string());
+    }
   }
 
   std::mutex m_mutex;
   std::filesystem::path m_filePath;
-  std::unique_ptr<FILE, decltype(&details::safe_fclose)> m_file;
+  details::NativeFile m_file;
 
   std::array<char, N> m_buffer;      // Fixed-size buffer
   std::size_t m_bufferWriteIndex{0}; // Current write index in the buffer
@@ -244,14 +217,13 @@ template <typename... Args> inline auto Console(Args &&...args) {
   return std::make_shared<ConsoleOutputter>(std::forward<Args>(args)...);
 }
 
-template <typename... Args> inline auto File(Args &&...args) {
-  return std::make_shared<FileOutputter<64 * literals::KiB>>(
-      std::forward<Args>(args)...);
+inline auto File(std::filesystem::path filePath) {
+  return std::make_shared<FileOutputter<64 * literals::KiB>>(filePath);
 }
 
 template <typename... Args, std::size_t N>
-inline auto File(Args &&...args, BufferCapacity<N>) {
-  return std::make_shared<FileOutputter<N>>(std::forward<Args>(args)...);
+inline auto File(std::filesystem::path filePath, BufferCapacity<N>) {
+  return std::make_shared<FileOutputter<N>>(filePath);
 }
 
 } // namespace outputters
