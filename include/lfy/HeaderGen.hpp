@@ -1,21 +1,14 @@
 #pragma once
 
 #include <chrono>
+#include <format>
 #include <iomanip>
 #include <string>
 #include <unordered_map>
 
-#ifdef _WIN32
-#include <timezoneapi.h>
-#include <windows.h>
-#endif
-
-#ifdef __linux__
-#include <time.h>
-#include <unistd.h>
-#endif
-
 #include "lfy/Types.hpp"
+
+#include "lfy/details/TimeWrapper.hpp"
 
 namespace lfy {
 
@@ -37,29 +30,9 @@ struct TimeCache {
       lastTimePoint; // Last time point when the time was formatted
 };
 
-inline std::tm toPlatformSpecificTm(std::time_t t, TimeType timeType) {
-#if defined(_WIN32)
-  std::tm tm;
-  if (timeType == TimeType::Utc)
-    gmtime_s(&tm, &t);
-  else
-    localtime_s(&tm, &t);
-  return tm;
-#elif defined(__linux__)
-  std::tm tm;
-  if (timeType == TimeType::Utc)
-    gmtime_r(&t, &tm);
-  else
-    localtime_r(&t, &tm);
-#else
-  throw std::runtime_error("makePlatformSpecificTm: Unsupported platform");
-#endif
-}
-
 inline std::string toNumericUtcOffset(int offsetInMinutes) {
   if (offsetInMinutes == 0)
     return "+00:00";
-
   char sign = (offsetInMinutes >= 0) ? '+' : '-';
   offsetInMinutes = std::abs(offsetInMinutes);
   int hours = offsetInMinutes / 60;
@@ -67,25 +40,9 @@ inline std::string toNumericUtcOffset(int offsetInMinutes) {
   return std::format("{}{:02}:{:02}", sign, hours, minutes);
 }
 
-inline int getTimeZoneOffsetInMinutes(const std::tm &time) {
-  int offsetInMinutes;
-#if defined(_WIN32)
-  DYNAMIC_TIME_ZONE_INFORMATION dtzi;
-  ::GetDynamicTimeZoneInformation(&dtzi);
-  offsetInMinutes = -(dtzi.Bias + ((time.tm_isdst > 0) ? dtzi.DaylightBias
-                                                       : dtzi.StandardBias));
-#elif defined(__linux__)
-  offsetInMinutes = time.tm_gmtoff / 60;
-#else
-  throw std::runtime_error("resolveTimeZoneOffset: Unsupported platform");
-#endif
-  return offsetInMinutes;
-}
-
 inline std::string toFormattedTime(const std::string &fmt, const std::tm &tm,
                                    int timeZoneOffset) {
-  // Handle %z manually, as std::put_time does not consistently correctly
-  // support it
+  // Handle %z manually, as std::put_time may not portably support it.
   auto fmtCopy = fmt;
   std::string::size_type pos = 0;
   while ((pos = fmtCopy.find("%z", pos)) != std::string::npos) {
@@ -93,7 +50,6 @@ inline std::string toFormattedTime(const std::string &fmt, const std::tm &tm,
     fmtCopy.replace(pos, 2, offsetStr);
     pos += offsetStr.size();
   }
-
   std::ostringstream oss;
   oss << std::put_time(&tm, fmtCopy.data());
   return oss.str();
@@ -132,11 +88,11 @@ inline auto _InternalTime(const std::string &fmt, const LogMetaData &metaData,
   }
 
   const std::time_t t = std::chrono::system_clock::to_time_t(now);
-  const std::tm tm = details::toPlatformSpecificTm(t, timeType);
+  const std::tm tm = (timeType == TimeType::Local) ? ::details::toLocalTm(t)
+                                                   : ::details::toUtcTm(t);
 
-  if (timeType == TimeType::Local &&
-      (now - last >= literals::timeZoneOffsetRefreshInterval))
-    cachedLocalTimeZoneOffset = details::getTimeZoneOffsetInMinutes(tm);
+  if (timeType == TimeType::Local)
+    cachedLocalTimeZoneOffset = ::details::getLocalTimeZoneOffsetMinutes(tm);
 
   std::string formattedTime = details::toFormattedTime(
       fmt, tm, (timeType == TimeType::Local) ? cachedLocalTimeZoneOffset : 0);

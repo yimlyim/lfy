@@ -9,11 +9,9 @@
 #if !defined(WIN32_LEAN_AND_MEAN)
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <lfy/details/NativeFileHandleWindows.hpp>
-
+#include "lfy/details/TimeWindows.hpp"
 #elif defined(__linux__)
-#include <lfy/details/NativeFileHandleLinux.hpp>
-
+#include "lfy/details/TimeLinux.hpp"
 #else
-#error "Unsupported platform for native file handle"
+#error "Unsupported platform for time functions"
 #endif
